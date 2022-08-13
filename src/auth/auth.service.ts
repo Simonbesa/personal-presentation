@@ -2,10 +2,11 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { SignInCredentialsDto, SignUpCredentialsDto } from './dto/users.dto';
 import * as bcrypt from 'bcrypt';
-import { decode, sign } from 'jsonwebtoken';
+import { decode, sign, JwtPayload, verify } from 'jsonwebtoken';
 import { JwtSecretKey } from './vo/jwt-secret-key.vo';
 import { SignInResponse } from './dto/signin.dto';
 import { SharedConfigService } from '../shared/shared-config.service';
+import { UserDomain } from 'src/users/domain/user.domain';
 @Injectable()
 export class AuthService {
   constructor(
@@ -17,7 +18,6 @@ export class AuthService {
     this.configService.get<string>('JWT_SECRET_KEY');
 
   private async signPayload(payload: any): Promise<string> {
-    console.log(this.b64JwtSecretKey);
     const secretKey = new JwtSecretKey(this.b64JwtSecretKey);
     return sign(payload, secretKey.toAscii(), {
       expiresIn: '7d',
@@ -55,5 +55,22 @@ export class AuthService {
       );
     }
     throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
+  }
+
+  public async verifyToken(token: string): Promise<UserDomain> {
+    const secretKey = new JwtSecretKey(this.b64JwtSecretKey);
+    try {
+      const payload: JwtPayload | string = verify(token, secretKey.toAscii());
+      const userDocument = await this.usersService.findOneByUserId(
+        payload['userId']
+      );
+      const userDomain = new UserDomain();
+      return userDomain.fromUserDocumentWithoutPassword(userDocument);
+    } catch (error) {
+      throw new HttpException(
+        'User is not authorized',
+        HttpStatus.UNAUTHORIZED
+      );
+    }
   }
 }
